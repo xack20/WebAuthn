@@ -1,15 +1,197 @@
-// src/components/Header.js
-import { Link } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Home, LogIn, Menu, Shield, User, X } from 'lucide-react';
+import { useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 
 const Header = () => {
+  const location = useLocation();
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const user = localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')) : null;
+
+  const navigationItems = [
+    { path: '/', label: 'Home', icon: Home },
+    ...(user 
+      ? [{ path: '/welcome', label: 'Dashboard', icon: User }]
+      : [
+          { path: '/register', label: 'Register', icon: User },
+          { path: '/login', label: 'Login', icon: LogIn }
+        ]
+    )
+  ];
+
+  const getNavItemColor = (path) => {
+    if (location.pathname === path) {
+      if (path === '/register') return '#f093fb';
+      if (path === '/welcome') return '#10b981';
+      return '#667eea';
+    }
+    return '#6b7280';
+  };
+
   return (
-    <header className="mt3 flex bb b--dotted bw2 b--light-purple bt-0 br-0 bl-0 justify-end mb1">
-      <Link to="/">
-        <svg className="w2 ph6" viewBox="0 0 20 20">
-          <path fill="#a463f2" d="M18.121,9.88l-7.832-7.836c-0.155-0.158-0.428-0.155-0.584,0L1.842,9.913c-0.262,0.263-0.073,0.705,0.292,0.705h2.069v7.042c0,0.227,0.187,0.414,0.414,0.414h3.725c0,0.228,0.414-0.188,0.414-0.414v-3.313h2.483v3.313c0,0.227,0.187,0.414,0.413,0.414h3.726c0.229,0,0.414-0.188,0.414-0.414v-7.042h2.068h0.004C18.331,10.617,18.389,10.146,18.121,9.88 M14.963,17.245h-2.896v-3.313c0-0.229-0.186-0.415-0.414-0.415H8.342c-0.228,0-0.414,0.187-0.414,0.415v3.313H5.032v-6.628h9.931V17.245z M3.133,9.79l6.864-6.868l6.867,6.868H3.133z"></path>
-        </svg>
-      </Link>
-    </header>
+    <motion.header 
+      initial={{ y: -100, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ duration: 0.6, ease: "easeOut" }}
+      style={{
+        margin: '1rem',
+        marginBottom: '2rem',
+        position: 'relative',
+        zIndex: 50
+      }}
+    >
+      <div className="glass-card" style={{
+        background: 'rgba(255, 255, 255, 0.4)',
+        backdropFilter: 'blur(20px)',
+        borderRadius: '24px',
+        border: '1px solid rgba(255, 255, 255, 0.3)',
+        boxShadow: '0 10px 40px rgba(0, 0, 0, 0.1)',
+        padding: '1rem 1.5rem'
+      }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          maxWidth: '1200px',
+          margin: '0 auto'
+        }}>
+          {/* Logo */}
+          <Link 
+            to="/" 
+            style={{ 
+              textDecoration: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem'
+            }}
+          >
+            <motion.div
+              whileHover={{ rotate: 360 }}
+              transition={{ duration: 0.6 }}
+              style={{
+                padding: '0.5rem',
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <Shield style={{ width: '1.5rem', height: '1.5rem', color: 'white' }} />
+            </motion.div>
+            <span style={{
+              fontSize: '1.25rem',
+              fontWeight: '700',
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text'
+            }}>
+              WebAuthn Secure
+            </span>
+          </Link>
+
+          {/* Desktop Navigation */}
+          <nav style={{ 
+            display: window.innerWidth > 768 ? 'flex' : 'none',
+            alignItems: 'center', 
+            gap: '0.5rem' 
+          }}>
+            {navigationItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <Link 
+                  key={item.path}
+                  to={item.path} 
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    padding: '0.75rem 1rem',
+                    borderRadius: '12px',
+                    textDecoration: 'none',
+                    color: getNavItemColor(item.path),
+                    background: location.pathname === item.path ? 'rgba(255, 255, 255, 0.6)' : 'transparent',
+                    transition: 'all 0.3s ease',
+                    fontWeight: '500',
+                    fontSize: '0.875rem'
+                  }}
+                >
+                  <Icon size={16} />
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+          </nav>
+
+          {/* Mobile Menu Button */}
+          <motion.button
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+            style={{
+              display: window.innerWidth <= 768 ? 'flex' : 'none',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '2.5rem',
+              height: '2.5rem',
+              borderRadius: '12px',
+              border: 'none',
+              background: 'rgba(255, 255, 255, 0.6)',
+              cursor: 'pointer',
+              transition: 'all 0.3s ease'
+            }}
+          >
+            {isMenuOpen ? <X size={20} /> : <Menu size={20} />}
+          </motion.button>
+        </div>
+
+        {/* Mobile Navigation Menu */}
+        <AnimatePresence>
+          {isMenuOpen && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.3 }}
+              style={{
+                marginTop: '1rem',
+                paddingTop: '1rem',
+                borderTop: '1px solid rgba(255, 255, 255, 0.3)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.5rem'
+              }}
+            >
+              {navigationItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <Link 
+                    key={item.path}
+                    to={item.path} 
+                    onClick={() => setIsMenuOpen(false)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.75rem',
+                      padding: '0.75rem 1rem',
+                      borderRadius: '12px',
+                      textDecoration: 'none',
+                      color: getNavItemColor(item.path),
+                      background: location.pathname === item.path ? 'rgba(255, 255, 255, 0.6)' : 'transparent',
+                      transition: 'all 0.3s ease',
+                      fontWeight: '500'
+                    }}
+                  >
+                    <Icon size={18} />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </motion.header>
   );
 };
 

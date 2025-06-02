@@ -205,3 +205,41 @@ export const encodeLoginCredential = (credential) => {
     clientExtensionResults: credential.getClientExtensionResults(),
   };
 };
+
+
+// Add to webAuthnUtils.js
+export const createCredentialSafely = async (options, retries = 2) => {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(`WebAuthn attempt ${attempt}/${retries}`);
+      
+      // Clear any extension interference
+      if (window.PublicKeyCredential.isConditionalMediationAvailable) {
+        await window.PublicKeyCredential.isConditionalMediationAvailable();
+      }
+      
+      // Create credential with timeout
+      const credential = await Promise.race([
+        navigator.credentials.create(options),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('WebAuthn timeout')), 60000)
+        )
+      ]);
+      
+      return credential;
+    } catch (error) {
+      console.error(`WebAuthn attempt ${attempt} failed:`, error);
+      
+      if (attempt === retries) {
+        // On final attempt, provide specific guidance
+        if (error.message.includes('transient') || error.name === 'UnknownError') {
+          throw new Error('Browser extension conflict detected. Please try in incognito mode or disable browser extensions temporarily.');
+        }
+        throw error;
+      }
+      
+      // Wait a bit before retry
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+  }
+};

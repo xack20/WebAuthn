@@ -8,6 +8,8 @@
     "@testing-library/user-event": "^13.5.0",
     "axios": "^1.4.0",
     "base64-js": "^1.5.1",
+    "framer-motion": "^12.15.0",
+    "lucide-react": "^0.511.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.11.0",
@@ -24,6 +26,13 @@
     "extends": [
       "react-app",
       "react-app/jest"
+    ],
+    "overrides": [
+      {
+        "files": ["*.json"],
+        "parser": "jsonc-eslint-parser",
+        "rules": {}
+      }
     ]
   },
   "browserslist": {
