@@ -1,7 +1,19 @@
 // src/services/authService.js
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL;
+// Determine API URL based on environment
+const getApiUrl = () => {
+  // If running locally (localhost), use local API
+  if (window.location.hostname === 'localhost') {
+    return process.env.REACT_APP_LOCAL_API_URL || 'http://localhost:8080/api';
+  }
+  // Otherwise use the production/ngrok API URL
+  return process.env.REACT_APP_API_URL || 'https://presently-amusing-marten.ngrok-free.app/api';
+};
+
+const API_URL = getApiUrl();
+
+console.log('Using API URL:', API_URL); // For debugging
 
 export const register = async (username, displayName) => {
   const formData = new FormData();
