@@ -2,20 +2,21 @@ import { motion } from 'framer-motion';
 import { AlertCircle, CheckCircle, Fingerprint, Loader, LogIn, Shield, User } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { finishLogin, login } from '../services/authService';
+import { finishLogin, startLogin } from '../services/authService';
 import { encodeLoginCredential, isWebAuthnSupported, prepareLoginOptions } from '../utils/webAuthnUtils';
 
 const LoginPage = () => {
   const [username, setUsername] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState(1);
-  const [authMethod, setAuthMethod] = useState('');
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setSuccess('');
     setIsLoading(true);
     
     if (!isWebAuthnSupported()) {
@@ -26,39 +27,58 @@ const LoginPage = () => {
     
     try {
       setStep(2);
-      setAuthMethod('Initiating authentication...');
+      console.log('Starting login for:', username);
       
-      const loginData = await login(username);
-      if (loginData.status === 'success') {
-        setStep(3);
-        setAuthMethod('Authenticating with biometric or security key...');
-        
-        const credentialGetOptions = prepareLoginOptions(loginData);
-        const credential = await navigator.credentials.get(credentialGetOptions);
-        
-        setStep(4);
-        setAuthMethod('Verifying credentials...');
-        
-        const encodedCredential = encodeLoginCredential(credential);
-        const result = await finishLogin(encodedCredential, username);
-        
-        if (result.status === 'success') {
-          setStep(5);
-          localStorage.setItem('user', JSON.stringify({
-            username: result.username,
-            displayName: result.displayName
-          }));
-          setTimeout(() => navigate('/welcome'), 1500);
-        } else {
-          setError(result.message || 'Authentication failed');
-          setStep(1);
-        }
-      } else {
-        setError(loginData.message || 'Authentication failed');
-        setStep(1);
-      }
+      // Step 1: Get authentication options from server
+      const authenticationOptions = await startLogin(username);
+      console.log('Authentication options received:', authenticationOptions);
+      
+      setStep(3);
+      
+      // Step 2: Get credential with WebAuthn API
+      const credentialGetOptions = prepareLoginOptions(authenticationOptions);
+      console.log('Prepared WebAuthn options:', credentialGetOptions);
+      
+      const credential = await navigator.credentials.get(credentialGetOptions);
+      console.log('Credential retrieved:', credential);
+      
+      setStep(4);
+      
+      // Step 3: Send credential to server
+      const assertionResponse = encodeLoginCredential(credential);
+      console.log('Sending assertion response:', assertionResponse);
+      
+      await finishLogin(username, assertionResponse);
+      
+      setStep(5);
+      setSuccess('Authentication successful! Welcome back!');
+      
+      // Save user info and redirect
+      localStorage.setItem('user', JSON.stringify({
+        username: username,
+        displayName: username // Backend doesn't return displayName in auth
+      }));
+      
+      setTimeout(() => navigate('/welcome'), 1500);
+      
     } catch (error) {
-      setError(error.response?.data?.message || error.message || 'Authentication failed');
+      console.error('Login error:', error);
+      
+      let errorMessage = 'Authentication failed. ';
+      
+      if (error.response?.status === 404) {
+        errorMessage += 'User not found. Please register first.';
+      } else if (error.response?.status === 400) {
+        errorMessage += 'Invalid credentials or request.';
+      } else if (error.response?.status === 500) {
+        errorMessage += 'Server error occurred. Please try again.';
+      } else if (error.name === 'NotAllowedError') {
+        errorMessage += 'The operation was cancelled or not allowed.';
+      } else {
+        errorMessage += error.message || 'An unknown error occurred.';
+      }
+      
+      setError(errorMessage);
       setStep(1);
     } finally {
       setIsLoading(false);
@@ -157,7 +177,7 @@ const LoginPage = () => {
         )}
 
         {/* Success Message */}
-        {step === 5 && (
+        {success && (
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -171,7 +191,7 @@ const LoginPage = () => {
             }}
           >
             <CheckCircle style={{ width: '2rem', height: '2rem', margin: '0 auto 0.5rem' }} />
-            <p>Authentication successful! Welcome back!</p>
+            <p>{success}</p>
           </motion.div>
         )}
 
@@ -229,34 +249,16 @@ const LoginPage = () => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: '0.5rem',
-                position: 'relative'
+                gap: '0.5rem'
               }}
             >
-              <motion.div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem'
-                }}
-                animate={{ opacity: isLoading ? 0 : 1 }}
-              >
-                <LogIn size={20} />
-                <span>Sign In</span>
-              </motion.div>
-              {isLoading && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  style={{
-                    position: 'absolute',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}
-                >
-                  <Loader style={{ width: '1.25rem', height: '1.25rem' }} className="animate-spin" />
-                </motion.div>
+              {isLoading ? (
+                <Loader style={{ width: '1.25rem', height: '1.25rem' }} className="animate-spin" />
+              ) : (
+                <>
+                  <LogIn size={20} />
+                  <span>Sign In</span>
+                </>
               )}
             </motion.button>
 
@@ -336,12 +338,14 @@ const LoginPage = () => {
               animate={{ opacity: [0.5, 1, 0.5] }}
               transition={{ duration: 1.5, repeat: Infinity }}
             >
-              {authMethod}
+              {step === 2 && 'Requesting authentication options...'}
+              {step === 3 && 'Please authenticate using your registered method'}
+              {step === 4 && 'Verifying credentials...'}
             </motion.p>
             
             {step === 3 && (
               <p style={{ fontSize: '0.875rem', color: '#9ca3af' }}>
-                Please authenticate using your registered method
+                Use your fingerprint, face ID, or security key
               </p>
             )}
           </motion.div>
@@ -362,7 +366,7 @@ const LoginPage = () => {
             color: '#6b7280'
           }}>
             <Shield size={16} />
-            <span>Secured with WebAuthn technology</span>
+            <span>Secured with WebAuthn4j technology</span>
           </div>
         </div>
       </div>

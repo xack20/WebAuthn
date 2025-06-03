@@ -1,62 +1,117 @@
-// src/services/authService.js
 import axios from 'axios';
 
-// Determine API URL based on environment
-const getApiUrl = () => {
-  // If running locally (localhost), use local API
-  if (window.location.hostname === 'localhost') {
-    return process.env.REACT_APP_LOCAL_API_URL || 'http://localhost:8080/api';
+// Update API URL for new backend
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:9080';
+
+// Create axios instance with default config
+const api = axios.create({
+  baseURL: API_URL,
+  withCredentials: true,
+  headers: {
+    'Content-Type': 'application/json'
   }
-  // Otherwise use the production/ngrok API URL
-  return process.env.REACT_APP_API_URL || 'https://presently-amusing-marten.ngrok-free.app/api';
+});
+
+// Add response interceptor for better error handling
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    console.error('API Error:', error.response?.data || error.message);
+    return Promise.reject(error);
+  }
+);
+
+// Registration flow for new backend
+export const startRegistration = async (username, displayName) => {
+  try {
+    console.log('Starting registration for:', { username, displayName });
+    
+    const response = await api.get(`/webauthn/register/options`, {
+      params: { username, displayName }
+    });
+    
+    console.log('Registration options response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('Error starting registration:', error);
+    throw error;
+  }
 };
 
-const API_URL = getApiUrl();
-
-console.log('Using API URL:', API_URL); // For debugging
-
-export const register = async (username, displayName) => {
-  const formData = new FormData();
-  formData.append('username', username);
-  formData.append('display', displayName);
-  
-  const response = await axios.post(`${API_URL}/auth/register`, formData, {
-    withCredentials: true
-  });
-  
-  return response.data;
+export const finishRegistration = async (username, attestationResponse) => {
+  try {
+    console.log('Finishing registration for:', username);
+    console.log('Attestation response:', attestationResponse);
+    
+    const response = await api.post(`/webauthn/register/complete`, 
+      attestationResponse,
+      { 
+        params: { username },
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+    
+    console.log('Registration completion response:', response.data);
+    return { status: 'success', data: response.data };
+  } catch (error) {
+    console.error('Error finishing registration:', error);
+    throw error;
+  }
 };
 
-export const finishRegistration = async (credential, username, credname) => {
-  const response = await axios.post(`${API_URL}/auth/finishRegistration`, {
-    credential: JSON.stringify(credential),
-    username,
-    credname
-  }, {
-    withCredentials: true
-  });
-  
-  return response.data;
+// Login flow for new backend
+export const startLogin = async (username) => {
+  try {
+    console.log('Starting login for:', username);
+    
+    const response = await api.get(`/webauthn/authenticate/options`, {
+      params: { username }
+    });
+    
+    console.log('Authentication options response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('Error starting login:', error);
+    throw error;
+  }
 };
 
-export const login = async (username) => {
-  const formData = new FormData();
-  formData.append('username', username);
-  
-  const response = await axios.post(`${API_URL}/auth/login`, formData, {
-    withCredentials: true
-  });
-  
-  return response.data;
+export const finishLogin = async (username, assertionResponse) => {
+  try {
+    console.log('Finishing login for:', username);
+    console.log('Assertion response:', assertionResponse);
+    
+    const response = await api.post(`/webauthn/authenticate/complete`,
+      assertionResponse,
+      { 
+        params: { username },
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+    
+    console.log('Authentication completion response:', response.data);
+    return { status: 'success', data: response.data };
+  } catch (error) {
+    console.error('Error finishing login:', error);
+    throw error;
+  }
 };
 
-export const finishLogin = async (credential, username) => {
-  const response = await axios.post(`${API_URL}/auth/finishLogin`, {
-    credential: JSON.stringify(credential),
-    username
-  }, {
-    withCredentials: true
-  });
-  
-  return response.data;
+// Check if user exists
+export const checkUserExists = async (username) => {
+  try {
+    await api.get(`/webauthn/authenticate/options`, {
+      params: { username }
+    });
+    return { exists: true };
+  } catch (error) {
+    if (error.response?.status === 404 || error.response?.status === 400) {
+      return { exists: false };
+    }
+    throw error;
+  }
 };

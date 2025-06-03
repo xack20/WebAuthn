@@ -1,18 +1,21 @@
-// src/utils/webAuthnUtils.js
+// Base64 utilities
+function base64urlToUint8array(base64Data) {
+  // Handle both string and object with value property
+  let base64Bytes;
+  if (typeof base64Data === "object" && base64Data.value) {
+    base64Bytes = base64Data.value;
+  } else if (typeof base64Data === "string") {
+    base64Bytes = base64Data;
+  } else {
+    throw new Error("Invalid base64 data format");
+  }
 
-// Base64 utilities - CORRECTED
-function base64urlToUint8array(base64Bytes) {
-  // Replace non-url safe chars with base64 standard chars
   const input = base64Bytes.replace(/-/g, "+").replace(/_/g, "/");
 
-  // Add padding if needed
   const padding = "=".repeat((4 - (input.length % 4)) % 4);
   const base64 = input + padding;
 
-  // Convert base64 to binary string
   const binary = atob(base64);
-
-  // Convert binary string to Uint8Array
   const array = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) {
     array[i] = binary.charCodeAt(i);
@@ -49,197 +52,170 @@ export const isWebAuthnSupported = () => {
   return window.PublicKeyCredential !== undefined;
 };
 
-// Prepare registration options - CORRECTED FUNCTION
-export const prepareRegistrationOptions = (response) => {
-  // Extract the actual credential creation options from the response
-  const credentialOptions = response.publicKeyCredentialCreationOptions;
+// Prepare registration options for WebAuthn4j backend
+export const prepareRegistrationOptions = (options) => {
+  console.log("Original options from backend:", options);
 
-  // Create a clean version of the extensions object
-  let cleanExtensions = {};
-
-  // Only add extensions that have valid values
-  if (credentialOptions.extensions) {
-    if (credentialOptions.extensions.credProps === true) {
-      cleanExtensions.credProps = true;
-    }
-
-    // Only include appidExclude if it's a valid URL string
-    if (
-      credentialOptions.extensions.appidExclude &&
-      typeof credentialOptions.extensions.appidExclude === "string" &&
-      credentialOptions.extensions.appidExclude.startsWith("http")
-    ) {
-      cleanExtensions.appidExclude = credentialOptions.extensions.appidExclude;
-    }
-
-    // Handle other extensions as needed
-    if (credentialOptions.extensions.uvm) {
-      cleanExtensions.uvm = credentialOptions.extensions.uvm;
-    }
-
-    if (credentialOptions.extensions.largeBlob) {
-      cleanExtensions.largeBlob = credentialOptions.extensions.largeBlob;
-    }
-  }
-
-  return {
-    publicKey: {
-      ...credentialOptions,
-      challenge: base64urlToUint8array(credentialOptions.challenge),
-      user: {
-        ...credentialOptions.user,
-        id: base64urlToUint8array(credentialOptions.user.id),
+  try {
+    const preparedOptions = {
+      publicKey: {
+        challenge: base64urlToUint8array(options.challenge),
+        rp: {
+          id: options.rp.id,
+          name: options.rp.name,
+        },
+        user: {
+          id: base64urlToUint8array(options.user.id),
+          name: options.user.name,
+          displayName: options.user.displayName,
+        },
+        pubKeyCredParams: options.pubKeyCredParams || [
+          { alg: -7, type: "public-key" },
+          { alg: -257, type: "public-key" },
+        ],
+        timeout: options.timeout || 60000,
+        excludeCredentials: options.excludeCredentials || [],
+        authenticatorSelection: {
+          authenticatorAttachment:
+            options.authenticatorSelection?.authenticatorAttachment ||
+            undefined,
+          requireResidentKey:
+            options.authenticatorSelection?.requireResidentKey || false,
+          residentKey:
+            options.authenticatorSelection?.residentKey || "preferred",
+          userVerification:
+            options.authenticatorSelection?.userVerification || "preferred",
+        },
+        attestation: options.attestation || "none",
+        extensions: options.extensions || {},
       },
-      excludeCredentials: credentialOptions.excludeCredentials
-        ? credentialOptions.excludeCredentials.map((credential) => ({
-            ...credential,
-            id: base64urlToUint8array(credential.id),
-          }))
-        : [],
-      // Replace the extensions with our cleaned version
-      extensions: cleanExtensions,
-    },
-  };
+    };
+
+    console.log("Prepared WebAuthn options:", preparedOptions);
+    return preparedOptions;
+  } catch (error) {
+    console.error("Error preparing registration options:", error);
+    throw new Error(`Failed to prepare WebAuthn options: ${error.message}`);
+  }
 };
 
-// Encode registration credential
+// Encode registration credential for WebAuthn4j backend
 export const encodeRegistrationCredential = (credential) => {
-  return {
-    type: credential.type,
-    id: credential.id,
-    response: {
-      attestationObject: uint8arrayToBase64url(
-        credential.response.attestationObject
-      ),
-      clientDataJSON: uint8arrayToBase64url(credential.response.clientDataJSON),
-      transports:
-        (credential.response.getTransports &&
-          credential.response.getTransports()) ||
-        [],
-    },
-    clientExtensionResults: credential.getClientExtensionResults(),
-  };
+  try {
+    const encoded = {
+      clientDataJSON: JSON.stringify({
+        type: credential.type,
+        id: credential.id,
+        response: {
+          attestationObject: uint8arrayToBase64url(
+            credential.response.attestationObject
+          ),
+          clientDataJSON: uint8arrayToBase64url(
+            credential.response.clientDataJSON
+          ),
+          transports:
+            (credential.response.getTransports &&
+              credential.response.getTransports()) ||
+            [],
+        },
+        clientExtensionResults: credential.getClientExtensionResults(),
+      }),
+      attestationObject: JSON.stringify({
+        type: credential.type,
+        id: credential.id,
+        response: {
+          attestationObject: uint8arrayToBase64url(
+            credential.response.attestationObject
+          ),
+          clientDataJSON: uint8arrayToBase64url(
+            credential.response.clientDataJSON
+          ),
+          transports:
+            (credential.response.getTransports &&
+              credential.response.getTransports()) ||
+            [],
+        },
+        clientExtensionResults: credential.getClientExtensionResults(),
+      }),
+    };
+
+    console.log("Encoded registration credential:", encoded);
+    return encoded;
+
+  } catch (error) {
+    console.error("Error encoding registration credential:", error);
+    throw new Error(`Failed to encode credential: ${error.message}`);
+  }
 };
 
-// Prepare login options - MORE ROBUST VERSION
-export const prepareLoginOptions = (response) => {
-  console.log("Login response:", response);
+// Prepare login options for WebAuthn4j backend
+export const prepareLoginOptions = (options) => {
+  console.log("Original login options from backend:", options);
 
-  // Extract the request options from the correct location in the response structure
-  const assertionRequest = response.assertionRequest;
+  try {
+    const preparedOptions = {
+      publicKey: {
+        challenge: base64urlToUint8array(options.challenge),
+        timeout: options.timeout || 60000,
+        rpId: options.rpId,
+        allowCredentials: options.allowCredentials
+          ? options.allowCredentials.map((credential) => ({
+              type: credential.type,
+              id: base64urlToUint8array(credential.id),
+              transports: credential.transports || [],
+            }))
+          : [],
+        userVerification: options.userVerification || "preferred",
+        extensions: options.extensions || {},
+      },
+    };
 
-  if (
-    !assertionRequest ||
-    !assertionRequest.publicKeyCredentialRequestOptions
-  ) {
-    console.error("Invalid assertion request format:", response);
-    throw new Error("Invalid response format from server");
-  }
-
-  // Access the publicKeyCredentialRequestOptions object
-  const requestOptions = assertionRequest.publicKeyCredentialRequestOptions;
-
-  // Build a safe version of the options object
-  const safeOptions = {
-    challenge: base64urlToUint8array(requestOptions.challenge),
-  };
-
-  // Only add properties if they exist and are valid
-  if (requestOptions.rpId) {
-    safeOptions.rpId = requestOptions.rpId;
-  }
-
-  if (requestOptions.timeout !== null && requestOptions.timeout !== undefined) {
-    safeOptions.timeout = requestOptions.timeout;
-  }
-
-  if (requestOptions.userVerification) {
-    safeOptions.userVerification = requestOptions.userVerification;
-  }
-
-  // Safely handle allowCredentials
-  if (
-    requestOptions.allowCredentials &&
-    Array.isArray(requestOptions.allowCredentials)
-  ) {
-    safeOptions.allowCredentials = requestOptions.allowCredentials.map(
-      (credential) => {
-        const result = {
-          type: credential.type,
-          id: base64urlToUint8array(credential.id),
-        };
-
-        // Only add transports if it's a valid array
-        if (credential.transports && Array.isArray(credential.transports)) {
-          result.transports = credential.transports;
-        }
-
-        return result;
-      }
+    console.log("Prepared login options:", preparedOptions);
+    return preparedOptions;
+  } catch (error) {
+    console.error("Error preparing login options:", error);
+    throw new Error(
+      `Failed to prepare WebAuthn login options: ${error.message}`
     );
   }
-
-  // Skip extensions entirely to avoid issues
-  // If extensions are needed, they can be added carefully one by one
-
-  return {
-    publicKey: safeOptions,
-  };
 };
 
-// Encode login credential
+// Encode login credential for WebAuthn4j backend
 export const encodeLoginCredential = (credential) => {
-  return {
-    type: credential.type,
-    id: credential.id,
-    response: {
+  try {
+    const encoded = {
+      id: credential.id,
+      clientDataJSON: JSON.stringify({
+        type: credential.type,
+        credentialId: credential.id,
+        id: credential.id,
+        response: {
+          authenticatorData: uint8arrayToBase64url(
+            credential.response.authenticatorData
+          ),
+          clientDataJSON: uint8arrayToBase64url(
+            credential.response.clientDataJSON
+          ),
+          signature: uint8arrayToBase64url(credential.response.signature),
+          userHandle:
+            credential.response.userHandle &&
+            uint8arrayToBase64url(credential.response.userHandle),
+        },
+        clientExtensionResults: credential.getClientExtensionResults(),
+      }),
       authenticatorData: uint8arrayToBase64url(
         credential.response.authenticatorData
       ),
-      clientDataJSON: uint8arrayToBase64url(credential.response.clientDataJSON),
       signature: uint8arrayToBase64url(credential.response.signature),
-      userHandle:
-        credential.response.userHandle &&
-        uint8arrayToBase64url(credential.response.userHandle),
-    },
-    clientExtensionResults: credential.getClientExtensionResults(),
-  };
-};
+      userHandle: credential.response.userHandle
+        ? uint8arrayToBase64url(credential.response.userHandle)
+        : null,
+    };
 
-
-// Add to webAuthnUtils.js
-export const createCredentialSafely = async (options, retries = 2) => {
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      console.log(`WebAuthn attempt ${attempt}/${retries}`);
-      
-      // Clear any extension interference
-      if (window.PublicKeyCredential.isConditionalMediationAvailable) {
-        await window.PublicKeyCredential.isConditionalMediationAvailable();
-      }
-      
-      // Create credential with timeout
-      const credential = await Promise.race([
-        navigator.credentials.create(options),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('WebAuthn timeout')), 60000)
-        )
-      ]);
-      
-      return credential;
-    } catch (error) {
-      console.error(`WebAuthn attempt ${attempt} failed:`, error);
-      
-      if (attempt === retries) {
-        // On final attempt, provide specific guidance
-        if (error.message.includes('transient') || error.name === 'UnknownError') {
-          throw new Error('Browser extension conflict detected. Please try in incognito mode or disable browser extensions temporarily.');
-        }
-        throw error;
-      }
-      
-      // Wait a bit before retry
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
+    console.log("Encoded login credential:", encoded);
+    return encoded;
+  } catch (error) {
+    console.error("Error encoding login credential:", error);
+    throw new Error(`Failed to encode login credential: ${error.message}`);
   }
 };

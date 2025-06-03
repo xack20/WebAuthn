@@ -117,3 +117,6 @@ yarn-error.log*
 
 # Developer tools
 .eslintcache
+
+extract_project.sh
+project_content.txt
